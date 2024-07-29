@@ -10,10 +10,12 @@
 #include <memory>
 #include <ostream>
 #include <string>
+#include <vector>
 
 #include "atlas/field.h"
 #include "atlas/functionspace.h"
 
+#include "oops/base/Variables.h"
 #include "oops/mpi/mpi.h"
 #include "oops/util/ObjectCounter.h"
 
@@ -34,24 +36,28 @@ class UnstructuredInterpolation : private util::ObjectCounter<UnstructuredInterp
  public:
   static const std::string classname() {return "oops::UnstructuredInterpolation";}
 
-  UnstructuredInterpolation(const eckit::Configuration &, const atlas::FunctionSpace &,
-                           const atlas::FunctionSpace &,
-                           const atlas::field::FieldSetImpl * = nullptr,
-                           const eckit::mpi::Comm & = oops::mpi::world());
+  UnstructuredInterpolation(const eckit::mpi::Comm &,
+                            const eckit::Configuration &,
+                            const atlas::FunctionSpace &,
+                            const atlas::FunctionSpace &,
+                            const std::vector<size_t> &,
+                            const oops::Variables &);
   ~UnstructuredInterpolation();
 
   void apply(const atlas::Field &, atlas::Field &);
-  void apply(const atlas::FieldSet &, atlas::FieldSet &);
+  void apply(atlas::FieldSet &);
 
-  void apply_ad(const atlas::Field &, atlas::Field &);
-  void apply_ad(const atlas::FieldSet &, atlas::FieldSet &);
+  void applyAD(const atlas::Field &, atlas::Field &);
+  void applyAD(atlas::FieldSet &);
 
   int write(const eckit::Configuration &);
 
  private:
   int keyUnstructuredInterpolator_;
-  const atlas::FunctionSpace *in_fspace_;
-  const atlas::FunctionSpace *out_fspace_;
+  const atlas::FunctionSpace innerFuncSpace_;
+  const atlas::FunctionSpace outerFuncSpace_;
+  std::vector<size_t> activeVariableSizes_;
+  oops::Variables activeVars_;
   void print(std::ostream &) const;
 };
 

@@ -9,7 +9,7 @@
 
 cmake_minimum_required( VERSION 3.12 )
 
-project( saber VERSION 1.4.0 LANGUAGES CXX Fortran )
+project( saber VERSION 1.9.0 LANGUAGES CXX Fortran )
 
 option(OPENMP "Build saber with OpenMP support" ON)
 
@@ -21,7 +21,9 @@ list( APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake )
 set( CMAKE_DIRECTORY_LABELS ${PROJECT_NAME} )
 
 ## Configuration options
-option( ENABLE_SABER_DOC "Build SABER documentation" OFF )
+option( ENABLE_SABER_INSTRUMENTATION "Enable SABER instrumentation" OFF )
+option( ENABLE_OFFLINE_CODECOV "Enable SABER offline code coverage" OFF )
+option( ENABLE_SABER_DOC "Enable SABER documentation" OFF )
 option( ENABLE_MKL "Use MKL for LAPACK implementation (if available)" ON )
 include( ${PROJECT_NAME}_compiler_flags )
 
@@ -29,73 +31,55 @@ include( ${PROJECT_NAME}_compiler_flags )
 # Required
 find_package( jedicmake REQUIRED )  # Prefer find modules from jedi-cmake
 if(OPENMP)
-  find_package( OpenMP REQUIRED COMPONENTS Fortran )
+  find_package( OpenMP REQUIRED COMPONENTS CXX Fortran )
 endif()
 find_package( MPI REQUIRED COMPONENTS Fortran )
 find_package( NetCDF REQUIRED COMPONENTS C Fortran )
-find_package( eckit 1.11.6 REQUIRED COMPONENTS MPI )
-find_package( fckit 0.7.0  REQUIRED )
-find_package( atlas 0.27.0 REQUIRED COMPONENTS OMP_Fortran )
+find_package( eckit 1.24.4 REQUIRED COMPONENTS MPI )
+find_package( fckit 0.11.0 REQUIRED )
+find_package( atlas 0.35.0 REQUIRED COMPONENTS OMP_Fortran TESSELATION)
 
 if( ENABLE_MKL )
     find_package( MKL )
 endif()
-if( MKL_FOUND )
+if( ENABLE_MKL AND MKL_FOUND )
     set( LAPACK_LIBRARIES ${MKL_LIBRARIES} )
 else()
     find_package( LAPACK REQUIRED )
 endif()
 
+# OOPS
+find_package( oops 1.9.0 REQUIRED )
+
 # Optionals
-find_package( oops QUIET OPTIONAL_COMPONENTS qg )
-find_package( gsibec 1.0.5 QUIET )
-find_package( vader QUIET )
+find_package( FFTW 3.3.8 QUIET )
+find_package( gsibec 1.2.1 QUIET )
+find_package( vader 1.6.0 QUIET )
 
 # Optional SABER blocks
 if( gsibec_FOUND )
     find_package( sp QUIET )
     message( STATUS "SABER block GSI is enabled" )
-    add_definitions(-DENABLE_GSIBEC=1)
 else()
-    message( STATUS "SABER block GSI is not enabled" )
-    add_definitions(-DENABLE_GSIBEC=0)
+    message( STATUS "SABER block GSI is NOT enabled" )
 endif()
-# TODO(Benjamin): remove this line once ATLAS is upgraded to 0.30.0 everywhere
-set( ENABLE_SPECTRALB 0 )
-if( atlas_VERSION GREATER_EQUAL 0.30.0 )
-    message( STATUS "ATLAS version higher or equal to 0.30.0" )
-    if( atlas_TRANS_FOUND )
-        message( STATUS "SABER block SPECTRALB is enabled" )
-        add_definitions(-Datlas_TRANS_FOUND=1)
-        set( ENABLE_SPECTRALB 1 )
-    else()
-        message( STATUS "SABER block SPECTRALB is not enabled" )
-        add_definitions(-Datlas_TRANS_FOUND=0)
-    endif()
+if( FFTW_FOUND )
+    message( STATUS "SABER block FastLAM spectral layer is enabled" )
 else()
-    message( STATUS "ATLAS version lower than 0.30.0" )
-    message( STATUS "SABER block SPECTRALB is not enabled" )
-    add_definitions(-Datlas_TRANS_FOUND=0)
+    message( STATUS "SABER block FastLAM spectral layer is NOT enabled" )
+endif()
+if( atlas_TRANS_FOUND OR atlas_ECTRANS_FOUND )
+    message( STATUS "SABER block SPECTRALB is enabled" )
+else()
+    message( STATUS "SABER block SPECTRALB is NOT enabled" )
 endif()
 if( vader_FOUND )
-    if ( ENABLE_VADER_MO )
-      message( STATUS "SABER blocks VADER are enabled (with MO-specific blocks)" )
-      add_definitions(-DENABLE_VADER_MO=1)
-    else()
-      message( STATUS "SABER blocks VADER are enabled (without MO-specific blocks)" )
-      add_definitions(-DENABLE_VADER_MO=0)
-    endif()
-    add_definitions(-DENABLE_VADER=1)
+    message( STATUS "SABER blocks based on VADER are enabled" )
 else()
-    message( STATUS "SABER blocks VADER are not enabled" )
-    add_definitions(-DENABLE_VADER=0)
+    message( STATUS "SABER blocks based on VADER are NOT enabled" )
 endif()
 
 ## SABER instrumentation
-set( ENABLE_SABER_INSTRUMENTATION 0 )
-if( DEFINED ENV{ENABLE_SABER_INSTRUMENTATION} )
-    set( ENABLE_SABER_INSTRUMENTATION $ENV{ENABLE_SABER_INSTRUMENTATION} )
-endif()
 if( ENABLE_SABER_INSTRUMENTATION )
     message( STATUS "SABER instrumentation is enabled" )
     add_definitions(-DENABLE_SABER_INSTRUMENTATION=1)
@@ -104,12 +88,27 @@ else()
     add_definitions(-DENABLE_SABER_INSTRUMENTATION=0)
 endif()
 
+## Code coverage
+if ( ENABLE_OFFLINE_CODECOV )
+    message( STATUS "Offline code coverage is enabled" )
+    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
+    set( CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -fprofile-arcs -ftest-coverage")
+    set( CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fprofile-arcs -ftest-coverage")
+    set( CMAKE_Fortran_LINK_FLAGS "${CMAKE_Fortran_LINK_FLAGS} -fprofile-arcs -ftest-coverage")
+else()
+    message( STATUS "Offline code coverage is not enabled" )
+endif()
+
 ## Sources
+add_subdirectory( quench )
 add_subdirectory( src/saber )
-add_subdirectory( tools ) # tools is needed for test
+add_subdirectory( tools )
 add_subdirectory( test )
 if( ENABLE_SABER_DOC )
+    message( STATUS "SABER documentation is enabled" )
     add_subdirectory( docs )
+else()
+    message( STATUS "SABER documentation is not enabled" )
 endif()
 
 ## Global tests
@@ -117,10 +116,6 @@ ecbuild_add_test( TARGET saber_coding_norms_src
                   TYPE SCRIPT
                   COMMAND ${CMAKE_BINARY_DIR}/bin/${PROJECT_NAME}_cpplint.py
                   ARGS --quiet --recursive ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/src )
-ecbuild_add_test( TARGET saber_coding_norms_test
-                  TYPE SCRIPT
-                  COMMAND ${CMAKE_BINARY_DIR}/bin/${PROJECT_NAME}_cpplint.py
-                  ARGS --quiet --recursive ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/test )
 
 ## Package Config
 ecbuild_install_project( NAME ${PROJECT_NAME} )
