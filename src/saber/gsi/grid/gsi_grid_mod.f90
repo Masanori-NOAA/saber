@@ -178,7 +178,7 @@ contains
 
   ! Read the latitudes and longitudes per GSIbec
   ! --------------------------------------------
-  call gsi_get_grid (self%lats,self%lons)
+  call gsi_get_grid ('degree',self%lats,self%lons)
   call gsi_set_grid (comm%rank(),vgrdfn)
 
   ! If debugging, read the latitude and longitude from file
